@@ -25,14 +25,33 @@ impl InfoBar {
         return info_bar;
     }
 
-    pub fn print(&self, text: String) {
+    fn print(&self, text: String) {
         self.win.clear();
         self.win.printw(text);
         self.win.refresh();
     }
+    
+    fn get_text(&self) -> String {
+        format!("{0} | {1} | {2}", self.server, self.channel, self.topic)
+    }
 
-    pub fn refresh_text(&self) {
-       self.print(format!("{0} | {1} | {2}", self.server, self.channel, self.topic));
+    fn refresh_text(&self) {
+        self.print(self.get_text());
+    }
+
+    pub fn set_server(&mut self, name: String) {
+        self.server = name;
+        self.refresh_text();
+    }
+
+    pub fn set_channel(&mut self, name: String) {
+        self.channel = name;
+        self.refresh_text();
+    }
+
+    pub fn set_topic(&mut self, name: String) {
+        self.topic = name;
+        self.refresh_text();
     }
 }
 
@@ -67,6 +86,14 @@ pub enum CommandMsg {
     AddCh(char),
     DelCh(),
     ResetCom(),
+    ChangeServer(String),
+    ChangeChannel(String),
+    ChangeTopic(String),
+}
+
+fn quit() {
+    endwin();
+    std::process::exit(0);
 }
 
 fn main() {
@@ -91,6 +118,10 @@ fn main() {
                 CommandMsg::ResetCom() => com_bar.reset_com(),
                 CommandMsg::AddCh(ch) => com_bar.add_ch(ch.to_string()),
                 CommandMsg::DelCh() => com_bar.del_ch(),
+                CommandMsg::ChangeServer(name) => info_bar.set_server(name),
+                CommandMsg::ChangeChannel(name) => info_bar.set_channel(name),           
+                CommandMsg::ChangeTopic(topic) => info_bar.set_topic(topic),
+                _ => {},
             }
             drop(com_bar);
             tx_curses.send(true).unwrap();
@@ -100,8 +131,17 @@ fn main() {
     // COMMAND HELPER
     thread::spawn(move || {
         let com = String::new();
+        tx_com.send(CommandMsg::ChangeChannel(String::from("FUCK"))).unwrap();
+        let exec_com = |com: &str| {
+            match com {
+                ":q" => quit(),
+                ":s" => tx_com.send(CommandMsg::ChangeServer(String::from("FUCK"))).unwrap(),
+                _ => {},
+            }
+        };
 
-        let exec_com = |refer: &str| {
+        let handle_com = |refer: &str| {
+            exec_com(refer);
             refer.to_string().clear();
             tx_com.send(CommandMsg::ResetCom()).unwrap();
         };
@@ -116,7 +156,7 @@ fn main() {
 
         for input in rx_com {
             match input {
-                Input::KeyEnter | Input::Character('\x0A') => exec_com(&com),
+                Input::KeyEnter | Input::Character('\x0A') => handle_com(&com),
                 Input::KeyBackspace | Input::Character('\u{7f}') => del_ch(&com),
                 Input::Character(ch) => add_ch(ch, &com),
                 _ => {},
