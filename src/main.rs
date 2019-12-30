@@ -8,23 +8,27 @@ use termion::raw::{IntoRawMode, RawTerminal};
 use termion::input::TermRead;
 use termion::{clear, cursor};
 
+fn quit() {
+    std::process::exit(0);
+}
+
 struct Command {
-    current_mode: InputMode,
+    mode: InputMode,
     com: String,
 }
 
 impl Command {
     pub fn new() -> Command {
         Command {
-            current_mode: InputMode::NoMode(),
+            mode: InputMode::NoMode,
             com: String::new(),
         }
     }
 
     pub fn change_mode(&mut self, new_mode: InputMode) {
-        self.current_mode = new_mode;
-        match self.current_mode {
-            InputMode::ComMode() => {
+        self.mode = new_mode;
+        match self.mode {
+            InputMode::ComMode => {
                 self.com.push(':');
             },
             _ => {},
@@ -43,18 +47,18 @@ impl Command {
 }
 
 pub enum CommandMsg {
-    IntoComMode(),
+    IntoComMode,
     AddCh(char),
-    DelCh(),
-    ResetCom(),
+    DelCh,
+    ResetCom,
     ChangeServer(String),
     ChangeChannel(String),
     ChangeTopic(String),
 }
 
 pub enum InputMode {
-    NoMode(),
-    ComMode(),
+    NoMode,
+    ComMode,
 }
 
 fn main() {
@@ -68,12 +72,15 @@ fn main() {
             Ok(size) => size,
             _ => (0, 0),
         };
-        
+
+        write!(stdout, "{}{}", clear::All, cursor::Goto(1, y_size));
+        stdout.flush().unwrap();
+
         let into_com_mode = |stdout: &mut RawTerminal<Stdout>| {
             write!(stdout, 
                    "{}{}{}", 
                    cursor::Show,
-                   cursor::Goto(1, y_size - 1),
+                   cursor::Goto(1, y_size),
                    clear::CurrentLine);
             stdout.flush().unwrap();
         };
@@ -81,7 +88,7 @@ fn main() {
             write!(stdout, 
                    "{}{}{}", 
                    cursor::Hide,
-                   cursor::Goto(1, y_size - 1),
+                   cursor::Goto(1, y_size),
                    clear::CurrentLine);
             stdout.flush().unwrap();
         };
@@ -93,19 +100,18 @@ fn main() {
         };
         let del_ch = |stdout: &mut RawTerminal<Stdout>| {
             write!(stdout, 
-                 "{}{}{}",
+                 "{}{}",
                  cursor::Left(1),
-                 clear::AfterCursor,
-                 cursor::Right(1));  
+                 clear::AfterCursor);
             stdout.flush().unwrap();
         };
 
         for rec in rx_ui {
             match rec {
-                CommandMsg::IntoComMode() => into_com_mode(&mut stdout),
-                CommandMsg::ResetCom() => reset_com(&mut stdout),
+                CommandMsg::IntoComMode => into_com_mode(&mut stdout),
+                CommandMsg::ResetCom => reset_com(&mut stdout),
                 CommandMsg::AddCh(ch) => add_ch(&mut stdout, ch),
-                CommandMsg::DelCh() => del_ch(&mut stdout),
+                CommandMsg::DelCh => del_ch(&mut stdout),
                 CommandMsg::ChangeServer(name) => {},
                 CommandMsg::ChangeChannel(name) => {},           
                 CommandMsg::ChangeTopic(topic) => {},
@@ -119,22 +125,47 @@ fn main() {
         let mut com = Command::new();
         
         let handle_com = |com: &mut Command| {
-            tx_com.send(CommandMsg::ResetCom()).unwrap();
-            com.clear();
+            match com.mode {
+                InputMode::ComMode => {
+                    tx_com.send(CommandMsg::ResetCom).unwrap();
+                    com.clear();
+                },
+                _ => {}
+            }
         };
         let del_ch = |com: &mut Command| {
-            tx_com.send(CommandMsg::DelCh()).unwrap();
-            com.del_ch();
+            match com.mode {
+                InputMode::ComMode => {
+                    tx_com.send(CommandMsg::DelCh).unwrap();
+                    com.del_ch();
+                },
+                _ => {},
+            };
         };
         let add_ch = |com: &mut Command, ch: char| {
-            tx_com.send(CommandMsg::AddCh(ch)).unwrap();
-            com.add_ch(ch);
+            match com.mode {
+                InputMode::ComMode => {
+                    tx_com.send(CommandMsg::AddCh(ch)).unwrap();
+                    com.add_ch(ch);
+                },
+                _ => {},
+            };
         };
-
+        let into_com_mode = |com: &mut Command| {
+            match com.mode {
+                InputMode::NoMode => {
+                    tx_com.send(CommandMsg::IntoComMode).unwrap();
+                    com.clear();
+                },
+                _ => {}
+            }
+        };
         for input in rx_com {
             match input {
                 Key::Char('\n') => handle_com(&mut com),
+                Key::Char(':') => com.change_mode(InputMode::ComMode),
                 Key::Backspace => del_ch(&mut com),
+                Key::Esc => quit(),
                 Key::Char(ch) => add_ch(&mut com, ch),
                 _ => {},
             }
