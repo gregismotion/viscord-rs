@@ -154,6 +154,7 @@ impl Command {
 }
 
 pub enum CommandMsg {
+    Cleanup,
     IntoMode(InputMode),
     AddCh(char),
     DelCh,
@@ -184,6 +185,10 @@ fn main() {
 
         for rec in rx_ui {
             match rec {
+                CommandMsg::Cleanup => {
+                    write!(stdout, "{}{}{}", clear::All, cursor::Show, style::Reset).unwrap();
+                    stdout.flush().unwrap();
+                }
                 CommandMsg::IntoMode(mode) => com_bar.into_mode(&mut stdout, mode),
                 CommandMsg::ResetCom => com_bar.reset_com(&mut stdout),
                 CommandMsg::AddCh(ch) => com_bar.add_ch(&mut stdout, ch),
@@ -200,11 +205,19 @@ fn main() {
         let mut com = Command::new();
         
         let exec_com = |com: &str| {
+            let com = &com[1..];
+            let mut args = com.split_whitespace().collect::<Vec<&str>>();
+            let com = args.remove(0);
             match com {
-                ":q" => quit(),
-                ":fuck" => tx_com.send(CommandMsg::ChangeServer(String::from("FUCK"))).unwrap(),
-                _ => tx_com.send(CommandMsg::ChangeServer(String::from(com))).unwrap(),
-            }
+                "q" => {
+                    tx_com.send(CommandMsg::Cleanup).unwrap();
+                    quit();
+                },
+                "chs" => {
+                    tx_com.send(CommandMsg::ChangeServer(String::from(args[0]))).unwrap();
+                },
+                _ => {},
+            }   
         };
         let handle_com = |com: &mut Command| {
             match com.mode {
