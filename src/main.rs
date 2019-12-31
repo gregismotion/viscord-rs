@@ -1,172 +1,26 @@
 use std::thread;
 use std::sync::{mpsc};
-use std::io::{stdin, stdout, Stdout, Write};
+use std::io::{stdin, stdout, Write};
 
 extern crate termion;
 use termion::event::Key;
-use termion::raw::{IntoRawMode, RawTerminal};
+use termion::raw::{IntoRawMode};
 use termion::input::TermRead;
 use termion::{clear, cursor, style};
 
+mod command;
+mod commandmsg;
+mod inputmode;
+mod com_bar;
+mod info_bar;
+use command::command::Command;
+use commandmsg::commandmsg::CommandMsg; 
+use inputmode::inputmode::InputMode;
+use com_bar::com_bar::ComBar;
+use info_bar::info_bar::InfoBar;
+
 fn quit() {
     std::process::exit(0);
-}
-
-struct InfoBar {
-    x_size: u16,
-    server: String,
-    channel: String,
-    topic: String,
-}
-
-impl InfoBar {
-    fn new(stdout: &mut RawTerminal<Stdout>, x_size: u16) -> InfoBar {
-        let info_bar = InfoBar {x_size: x_size,    
-                 server: String::from("Not in server"),
-                 channel: String::from("Not in channel"),
-                 topic: String::from("No topic"),
-        };
-        info_bar.refresh_text(stdout);
-        info_bar
-    }
-
-    fn print(&self, stdout: &mut RawTerminal<Stdout>, text: String) {
-        write!(stdout, 
-               "{}{}{}{: ^width$}{}",
-               cursor::Goto(1, 1),
-               style::Invert,
-               text,
-               String::new(),
-               style::Reset,
-               width = usize::from(self.x_size) - text.len()).unwrap();
-        stdout.flush().unwrap();
-    }
-
-    fn refresh_text(&self, stdout: &mut RawTerminal<Stdout>) {
-        self.print(stdout, format!("{0} | {1} | {2}", self.server, self.channel, self.topic));
-    }
-
-    pub fn change_server(&mut self, stdout: &mut RawTerminal<Stdout>, name: String) {
-       self.server = name;
-       self.refresh_text(stdout);
-    }
-
-    pub fn change_channel(&mut self, stdout: &mut RawTerminal<Stdout>, name: String) {
-       self.channel = name;
-       self.refresh_text(stdout);
-    }
-
-    pub fn change_topic(&mut self, stdout: &mut RawTerminal<Stdout>, topic: String) {
-       self.topic = topic;
-       self.refresh_text(stdout);
-    }
-}
-
-struct ComBar {
-    y_pos: u16,
-}
-
-impl ComBar {
-    fn new(stdout: &mut RawTerminal<Stdout>, y_pos: u16) -> ComBar {
-        write!(stdout, 
-               "{}{}{}", 
-               clear::All, 
-               cursor::Goto(1, y_pos), 
-               cursor::Hide).unwrap();
-        stdout.flush().unwrap();
-        ComBar {y_pos}
-    }
-
-    pub fn into_mode(&self, stdout: &mut RawTerminal<Stdout>, mode: InputMode) {
-        match mode  {
-            InputMode::NoMode => {
-                write!(stdout, "{}", cursor::Hide).unwrap();
-            },
-            InputMode::ComMode => {
-                write!(stdout, 
-                       "{}{}{}:", 
-                       cursor::Show,
-                       cursor::Goto(1, self.y_pos),
-                       clear::CurrentLine).unwrap();
-            },
-        }
-        stdout.flush().unwrap();
-    }
-
-    pub fn reset_com(&self, stdout: &mut RawTerminal<Stdout>) {
-        write!(stdout, 
-               "{}{}{}", 
-               cursor::Hide,
-               cursor::Goto(1, self.y_pos),
-               clear::CurrentLine).unwrap();
-        stdout.flush().unwrap();
-    }
-
-    pub fn add_ch(&self, stdout: &mut RawTerminal<Stdout>, ch: char) {
-        write!(stdout, 
-             "{}",
-             ch).unwrap();  
-        stdout.flush().unwrap();
-    }
-
-    pub fn del_ch(&self, stdout: &mut RawTerminal<Stdout>) {
-        write!(stdout, 
-             "{}{}",
-             cursor::Left(1),
-             clear::AfterCursor).unwrap();
-        stdout.flush().unwrap();
-    }
-
-}
-
-struct Command {
-    mode: InputMode,
-    com: String,
-}
-
-impl Command {
-    fn new() -> Command {
-        Command {
-            mode: InputMode::NoMode,
-            com: String::new(),
-        }
-    }
-
-    pub fn change_mode(&mut self, new_mode: InputMode) {
-        self.mode = new_mode;
-        match self.mode {
-            InputMode::ComMode => {
-                self.com.push(':');
-            },
-            _ => {},
-        }
-    }
-
-    pub fn add_ch(&mut self, ch: char) {
-        self.com.push(ch);
-    }
-    pub fn del_ch(&mut self) {
-        self.com.pop();
-    }
-    pub fn clear(&mut self) {
-        self.com.clear();
-    }
-}
-
-pub enum CommandMsg {
-    Cleanup,
-    IntoMode(InputMode),
-    AddCh(char),
-    DelCh,
-    ResetCom,
-    ChangeServer(String),
-    ChangeChannel(String),
-    ChangeTopic(String),
-}
-
-pub enum InputMode {
-    NoMode,
-    ComMode,
 }
 
 fn main() {
@@ -212,9 +66,6 @@ fn main() {
                 "q" => {
                     tx_com.send(CommandMsg::Cleanup).unwrap();
                     quit();
-                },
-                "chs" => {
-                    tx_com.send(CommandMsg::ChangeServer(String::from(args[0]))).unwrap();
                 },
                 _ => {},
             }   
