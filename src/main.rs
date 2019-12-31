@@ -6,10 +6,60 @@ extern crate termion;
 use termion::event::Key;
 use termion::raw::{IntoRawMode, RawTerminal};
 use termion::input::TermRead;
-use termion::{clear, cursor};
+use termion::{clear, cursor, style};
 
 fn quit() {
     std::process::exit(0);
+}
+
+struct InfoBar {
+    x_size: u16,
+    server: String,
+    channel: String,
+    topic: String,
+}
+
+impl InfoBar {
+    fn new(stdout: &mut RawTerminal<Stdout>, x_size: u16) -> InfoBar {
+        let info_bar = InfoBar {x_size: x_size,    
+                 server: String::from("Not in server"),
+                 channel: String::from("Not in channel"),
+                 topic: String::from("No topic"),
+        };
+        info_bar.refresh_text(stdout);
+        info_bar
+    }
+
+    fn print(&self, stdout: &mut RawTerminal<Stdout>, text: String) {
+        write!(stdout, 
+               "{}{}{}{: ^width$}{}",
+               cursor::Goto(1, 1),
+               style::Invert,
+               text,
+               String::new(),
+               style::Reset,
+               width = usize::from(self.x_size) - text.len()).unwrap();
+        stdout.flush().unwrap();
+    }
+
+    fn refresh_text(&self, stdout: &mut RawTerminal<Stdout>) {
+        self.print(stdout, format!("{0} | {1} | {2}", self.server, self.channel, self.topic));
+    }
+
+    pub fn change_server(&mut self, stdout: &mut RawTerminal<Stdout>, name: String) {
+       self.server = name;
+       self.refresh_text(stdout);
+    }
+
+    pub fn change_channel(&mut self, stdout: &mut RawTerminal<Stdout>, name: String) {
+       self.channel = name;
+       self.refresh_text(stdout);
+    }
+
+    pub fn change_topic(&mut self, stdout: &mut RawTerminal<Stdout>, topic: String) {
+       self.topic = topic;
+       self.refresh_text(stdout);
+    }
 }
 
 struct ComBar {
@@ -18,7 +68,11 @@ struct ComBar {
 
 impl ComBar {
     fn new(stdout: &mut RawTerminal<Stdout>, y_pos: u16) -> ComBar {
-        write!(stdout, "{}{}{}", clear::All, cursor::Goto(1, y_pos), cursor::Hide);
+        write!(stdout, 
+               "{}{}{}", 
+               clear::All, 
+               cursor::Goto(1, y_pos), 
+               cursor::Hide).unwrap();
         stdout.flush().unwrap();
         ComBar {y_pos}
     }
@@ -26,14 +80,14 @@ impl ComBar {
     pub fn into_mode(&self, stdout: &mut RawTerminal<Stdout>, mode: InputMode) {
         match mode  {
             InputMode::NoMode => {
-                write!(stdout, "{}", cursor::Hide);
+                write!(stdout, "{}", cursor::Hide).unwrap();
             },
             InputMode::ComMode => {
                 write!(stdout, 
                        "{}{}{}:", 
                        cursor::Show,
                        cursor::Goto(1, self.y_pos),
-                       clear::CurrentLine);
+                       clear::CurrentLine).unwrap();
             },
         }
         stdout.flush().unwrap();
@@ -44,14 +98,14 @@ impl ComBar {
                "{}{}{}", 
                cursor::Hide,
                cursor::Goto(1, self.y_pos),
-               clear::CurrentLine);
+               clear::CurrentLine).unwrap();
         stdout.flush().unwrap();
     }
 
     pub fn add_ch(&self, stdout: &mut RawTerminal<Stdout>, ch: char) {
         write!(stdout, 
              "{}",
-             ch);  
+             ch).unwrap();  
         stdout.flush().unwrap();
     }
 
@@ -59,7 +113,7 @@ impl ComBar {
         write!(stdout, 
              "{}{}",
              cursor::Left(1),
-             clear::AfterCursor);
+             clear::AfterCursor).unwrap();
         stdout.flush().unwrap();
     }
 
@@ -126,6 +180,7 @@ fn main() {
             _ => (0, 0),
         };
         let com_bar = ComBar::new(&mut stdout, y_size);
+        let mut info_bar = InfoBar::new(&mut stdout, x_size);
 
         for rec in rx_ui {
             match rec {
@@ -133,10 +188,9 @@ fn main() {
                 CommandMsg::ResetCom => com_bar.reset_com(&mut stdout),
                 CommandMsg::AddCh(ch) => com_bar.add_ch(&mut stdout, ch),
                 CommandMsg::DelCh => com_bar.del_ch(&mut stdout),
-                CommandMsg::ChangeServer(name) => {},
-                CommandMsg::ChangeChannel(name) => {},           
-                CommandMsg::ChangeTopic(topic) => {},
-                _ => {},
+                CommandMsg::ChangeServer(name) => info_bar.change_server(&mut stdout, name),
+                CommandMsg::ChangeChannel(name) => info_bar.change_channel(&mut stdout, name),           
+                CommandMsg::ChangeTopic(topic) => info_bar.change_topic(&mut stdout, topic),
             }
         }
     });
@@ -145,10 +199,18 @@ fn main() {
     thread::spawn(move || {      
         let mut com = Command::new();
         
+        let exec_com = |com: &str| {
+            match com {
+                ":q" => quit(),
+                ":fuck" => tx_com.send(CommandMsg::ChangeServer(String::from("FUCK"))).unwrap(),
+                _ => tx_com.send(CommandMsg::ChangeServer(String::from(com))).unwrap(),
+            }
+        };
         let handle_com = |com: &mut Command| {
             match com.mode {
                 InputMode::ComMode => {
                     tx_com.send(CommandMsg::ResetCom).unwrap();
+                    exec_com(&com.com);
                     com.clear();
                     com.change_mode(InputMode::NoMode);
                 },
