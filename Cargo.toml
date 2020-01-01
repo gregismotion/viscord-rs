@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 termion = "1.5"
+serenity = { git = "https://github.com/thegergo02/serenity", branch = "current" }
