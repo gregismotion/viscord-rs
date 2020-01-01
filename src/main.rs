@@ -3,10 +3,14 @@ use std::sync::{mpsc};
 use std::io::{stdin, stdout, Write};
 
 extern crate termion;
-use termion::event::Key;
-use termion::raw::{IntoRawMode};
-use termion::input::TermRead;
-use termion::{clear, cursor, style};
+use termion::{
+    event::Key,
+    raw::{IntoRawMode},
+    input::TermRead,
+    clear,
+    cursor,
+    style,
+};
 
 mod command;
 mod commandmsg;
@@ -53,7 +57,7 @@ fn main() {
             }
         }
     });
-    
+ 
     // COMMAND HELPER
     thread::spawn(move || {      
         let mut com = Command::new();
