@@ -58,6 +58,11 @@ fn main() {
         }
     });
  
+    //DISCORD API
+    thread::spawn(move || {
+        
+    });    
+
     // COMMAND HELPER
     thread::spawn(move || {      
         let mut com = Command::new();
